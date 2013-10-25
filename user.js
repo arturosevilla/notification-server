@@ -42,7 +42,12 @@ exports.initUserRetrieval = function(log, secret, redisUrl) {
             return null;
         }
         var possibleSessionId = cookieValue.substr(40);
-        var hmac = crypto.createHmac('sha1', secret);
+        var hmac;
+        try {
+            hmac = crypto.createHmac('sha1', secret);
+        } catch(e) {
+            return null;
+        }
         var signature = hmac.update(possibleSessionId).digest('hex');
         var givenSignature = cookieValue.substr(0, 40);
 
