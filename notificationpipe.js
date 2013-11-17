@@ -136,15 +136,10 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
                 return;
             }
 
-            var notificationObject = {
-                'unread': 0,
-                'notification': notification
-            };
-
             var registrations = registeredUsers[recipient];
             for (var x in registrations) {
                 /* callbacks in each registration */
-                registrations[x].callback(notificationObject);
+                registrations[x].callback(notification);
             }
         });
     }
