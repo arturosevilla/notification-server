@@ -63,20 +63,44 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
     var notifiers = {};
     var messageCallback = null;
     var registeredUsers = {};
+    var notifierSocket = zmq.socket('sub');
+    notifierSocket.on('message', function(message) {
+        /* we received an encoded notification */
+        message = message.toString();
+        log.debug('Received notification: ' + message);
+        var separation = message.indexOf('|');
+        if (separation <= 0) {
+            log.warn('Wrong serialization of message: ' + message);
+            return;
+        }
+        var recipient = message.substr(0, separation);
+        var notification = JSON.parse(message.substr(separation + 1));
+        if (!registeredUsers.hasOwnProperty(recipient)) {
+            return;
+        }
+
+        var registrations = registeredUsers[recipient];
+        var x;
+        for (x in registrations) {
+            /* callbacks in each registration */
+            registrations[x].callback(notification);
+        }
+    });
 
     function doSubscribe(notifier, user) {
-        notifier.socket.subscribe(user);
+        notifierSocket.subscribe(user);
         notifier.subscribers[user] = true;
     }
 
     function doUnsubscribe(notifier, user) {
-        notifier.socket.unsubscribe(user);
+        notifierSocket.unsubscribe(user);
         delete notifier.subscribers[user];
     }
 
     function subscribeToUserNotifications(user) {
         log.debug('Subscribing to user notification channel: ' + user);
-        for (var x in notifiers) {
+        var x;
+        for (x in notifiers) {
             if (notifiers.hasOwnProperty(x) &&
                 !notifiers[x].subscribers.hasOwnProperty(user)) {
                 doSubscribe(notifiers[x], user);
@@ -86,7 +110,8 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
 
     function unsubscribeToUserNotifications(user) {
         log.debug('Unsubscribing to user notification channel: ' + user);
-        for (var x in notifiers) {
+        var x;
+        for (x in notifiers) {
             if (notifiers.hasOwnProperty(x) &&
                 !notifiers[x].subscribers.hasOwnProperty(user)) {
                 doUnsubscribe(notifiers[x], user);
@@ -105,43 +130,21 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
         /* connect to a notifier queue. At first we are not going to receive
          * messages because we need to subscribe to a given filter (user ids)
          */
-        var notifierSocket = zmq.socket('sub');
         notifierSocket.connect(address);
         var notifier = {
-            socket: notifierSocket,
             subscribers: {}
         };
         notifiers[address] = notifier;
 
         /* subscribe the already registered users */
-        for (var user in registeredUsers) {
+        var user;
+        for (user in registeredUsers) {
             if (registeredUsers.hasOwnProperty(user)) {
                 doSubscribe(notifier, user);
             }
         }
 
         log.debug('Connected to PUB notifier');
-        notifierSocket.on('message', function(message) {
-            /* we received an encoded notification */
-            message = message.toString();
-            log.debug('Received notification: ' + message);
-            var separation = message.indexOf('|');
-            if (separation <= 0) {
-                log.warn('Wrong serialization of message: ' + message);
-                return;
-            }
-            var recipient = message.substr(0, separation);
-            var notification = JSON.parse(message.substr(separation + 1));
-            if (!registeredUsers.hasOwnProperty(recipient)) {
-                return;
-            }
-
-            var registrations = registeredUsers[recipient];
-            for (var x in registrations) {
-                /* callbacks in each registration */
-                registrations[x].callback(notification);
-            }
-        });
     }
     
     requestNotifiers(reqServerConfig, function(notAddresses) {
@@ -151,7 +154,8 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
         }
 
         log.debug('Connecting to ' + notAddresses.length + ' PUB notifiers');
-        for (var x in notAddresses) {
+        var x;
+        for (x in notAddresses) {
             addPublisher(notAddresses[x]);
         }
     });
@@ -169,7 +173,8 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
         msg = msg.toString();
         log.debug('Received list of publishers: ' + msg);
         var receivedPublishers = JSON.parse(msg);
-        for (var x in receivedPublishers) {
+        var x;
+        for (x in receivedPublishers) {
             addPublisher(receivedPublishers[x]);
         }
     });
@@ -196,7 +201,7 @@ function initNotificationPipe(pubNotifierConfig, reqServerConfig, session) {
                 return;
             }
             var registryPosition = registeredUsers[user].indexOf(registry);
-            if (registryPosition > 0) {
+            if (registryPosition >= 0) {
                 registeredUsers[user].splice(registryPosition, 1);
             }
             if (registeredUsers[user].length === 0) {
